@@ -1,159 +1,60 @@
-# ReZip
-For more efficient Git packing of ZIP based files.
+# ReZip and ZipDoc Fork
 
-## Motivation
+This fork was created to make it easier for KCVS team members to setup ReZip and ZipDoc on team computers. This is also primarily intended to add .h5p processing for our upcoming project.
 
-Many popular applications, such as
-[Microsoft](http://en.wikipedia.org/wiki/Office_Open_XML) and
-[Open](http://en.wikipedia.org/wiki/OpenDocument) Office,
-save their documents as XML in compressed zip containers.
-Small changes to these document's contents may result in big changes to their
-compressed binary container file.
-When compressed files are stored in a Git repository
-these big differences make delta compression inefficient or impossible
-and the repository size is roughly the sum of its revisions.
+Rezip - For more efficient Git packing of ZIP based files.
 
-This small program acts as a Git clean filter driver.
-It reads a ZIP file from stdin and outputs the same ZIP content to stdout,
-but without compression.
-
-##### pros
-
-+ human readbale/plain-text diffs of (ZIP based) archives,
-  (if they contain plain-text files)
-+ smaller overall repository size if the archive contents change frequently
-
-##### cons
-
-- slower `git add`/`git commit` process
-- (optional) slower checkout process
-
-## How it works
-
-On every `git add` operation, the files assigned to the ZIP based file type in
-_.gitattributes_ are piped through this filter to remove their compression.
-Git internally uses zlib compression to store the resulting blob,
-so the final size of the loose object in the repository is usually comparable
-to the size of the original compressed ZIP document.
-
-The advantage of passing uncompressed data to Git,
-is that during garbage collection,
-when Git merges loose objects into packfiles,
-the delta compression it uses will be able to more efficiently pack the common
-data it finds among these uncompressed revisions.
-This can reduce the repository size by up to 50%, depending on the data.
-
-The smudge filter will re-compress the
-ZIP documents when they are checked out.
-The rezipped file may be a different size than the original,
-because of the compression level used by the filter.
-The use of this filter at checkout will save disk space in the working
-directory, at the expense of performance during checkout.
-I have not found any application yet, that refused to read an
-uncompressed ZIP document, so the smudge filter is optional.
-This also means that repositories may be downloaded and used immediately,
-without any special burdon on the recipients to install this filter driver.
-
-If other contributors add compressed ZIP documents to the repository
-without using the clean filter (the one applied during `add`/`commit`),
-the only harm will be the usual loss of packing efficiency for compressed
-documents during garbage collection, and non-verbose diffs.
-
-## Inspiration and similar projects
-
-The idea to commit ZIP documents to the repository in uncompressed form was
-based on concepts demonstrated in the
-[Mercurial Zipdoc extension](http://mercurial.selenic.com/wiki/ZipdocExtension)
-by Andreas Gobell.
-
-[OoXmlUnpack](https://bitbucket.org/htilabs/ooxmlunpack) is a similar program
-for Mercurial, written in C#, which also pretty-prints the XML files and adds
-some file handling features specific to Excel.
-
-[callegar/Rezip](https://github.com/callegar/Rezip) should be compatible with
-this Git filter, but is written as a bash script to drive Info-ZIP zip/unzip
-executables.
-
-[Zippey](https://bitbucket.org/sippey/zippey) is a similar method available
-for Git, written in python,
-but it stores uncompressed data as custom records within the Git repository.
-This format is not directly usable without the smudge filter, so it is a less
-portable option.
-
-## Human readable diffing
-
-This filter is only concerned with the efficient storage of ZIP data within Git.
-For human readable diffs between revisions,
-You will need to add a Git `textconv` program that can convert your format into text.
-Direct merges are not possible, since they would corrupt the ZIP CRC checksum.
-If the data within the ZIP is plain-text,
-then you could visualize differences with a `textconv` program like
-[zipdoc](https://github.com/costerwi/zipdoc).
-For more complex documents, there are domain specific options.
-For example for
-[word processing](http://blog.martinfenner.org/2014/08/25/using-microsoft-word-with-git/),
-[Excel](https://github.com/tokuhirom/git-xlsx-textconv),
-and
-[Simulink](https://github.com/costerwi/simulink-mergeDiff).
+ZipDoc - A Git `textconv` program to dump a ZIP files contents as text to stdout.
 
 ## Installation
 
-This program requires Java JRE 8 or newer.
-Store _ReZip.class_ somewhere in your home directory,
-for example `~/bin`, or in your repository.
+This program requires Java JDK 14 or newer.
 
-Define the filter drivers in `~/.gitconfig`:
+Begin by installing the current version of the Java Development Kit.
+
+https://www.oracle.com/java/technologies/downloads/#jdk18-windows
+
+After install ensure that the correct version of java is available in the System Path. To do this open a command prompt and enter: `java -version`.
+
+```
+C:\Users\<USERNAME>>java -version
+java version "18.0.2" 2022-07-19
+Java(TM) SE Runtime Environment (build 18.0.2+9-61)
+Java HotSpot(TM) 64-Bit Server VM (build 18.0.2+9-61, mixed mode, sharing)
+```
+
+The default Java Runtime is JRE_1.8.\*, this version will not work the `git diff` command. If you have the JRE, and also want the JDK, you will need to set your system path to point to the newer JDK with a %JAVA_HOME% variable. I found this to be a useful reference: https://confluence.atlassian.com/doc/setting-the-java_home-variable-in-windows-8895.html.
+
+Once you have a current Java installation set up, you will need to copy `ReZip.class` and `ZipDoc.class` into `~/bin`. It is possible you may need to create this folder. To do so navigate to your `C:\Users\<USERNAME>\` and create a new folder called `bin`.
+
+Next we need to configure our git installation. Open a git bash window, then enter the following commands:
+
 ```
 git config --global --replace-all filter.rezip.clean "java -cp ~/bin ReZip --store"
-# optionally add smudge filter:
 git config --global --add filter.rezip.smudge "java -cp ~/bin ReZip"
+git config --global --replace-all diff.zipdoc.textconv "java -cp ~/bin ZipDoc"
 ```
 
-Assign filter attributes to paths in `<repo-root>/.gitattributes`:
+The git filter and diff commands are now set up. Next we need to add a `.gitattributes` file to the root of the repo you are working with. We add the following attributes to `<repo-root/.gitattributes>`:
+
 ```
 # MS Office
-*.docx  filter=rezip
-*.xlsx  filter=rezip
-*.pptx  filter=rezip
+*.docx  filter=rezip diff=zipdoc
+*.xlsx  filter=rezip diff=zipdoc
+*.pptx  filter=rezip diff=zipdoc
 # OpenOffice
-*.odt   filter=rezip
-*.ods   filter=rezip
-*.odp   filter=rezip
+*.odt   filter=rezip diff=zipdoc
+*.ods   filter=rezip diff=zipdoc
+*.odp   filter=rezip diff=zipdoc
 # Misc
-*.mcdx  filter=rezip
-*.slx   filter=rezip
+*.mcdx  filter=rezip diff=zipdoc
+*.slx   filter=rezip diff=zipdoc
+*.epub  filter=rezip diff=zipdoc
+*.h5p   filter=rezip diff=zipdoc
 ```
 
-As described in [gitattributes](http://git-scm.com/docs/gitattributes),
-you may see unnecessary merge conflicts when you add attributes to a file that
-causes the repository format for that file to change.
-To prevent this, Git can be told to run a virtual check-out and check-in of all
-three stages of a file when resolving a three-way merge:
+Lastly, we need to open a git bash to the repo root and run the following command to help prevent unnecessary merge conflicts.
+
 ```
 git config --add --bool merge.renormalize true
 ```
-
-## Observations
-
-The following are based on my experience in real-world cases.
-Use at your own risk.
-Your mileage may vary.
-
-### Simulink
-
-* One packed repository with rezip was 54% of the size of the packed repository
-  storing compressed ZIPs.
-* Another repository with 280 \*.slx files and over 3000 commits was originally 281 MB
-  and was reduced to 156 MB using this technique (55% of baseline).
-
-### Powerpoint
-
-I found that the loose objects stored without this filter were about 5% smaller
-than the original file size (zlib on top of zip compression).
-When using the rezip filter, the loose objects were about 10% smaller than the
-original files, since zlib could work more efficiently on uncompressed data.
-The packed repository with rezip was only 10% smaller than the packed repository
-storing compressed zips.
-I think this unremarkable efficiency improvement is due to a large number of
-\*.png files in the presentation which were already stored without compression in the original \*.pptx.
-
